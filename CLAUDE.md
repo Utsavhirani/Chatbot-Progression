@@ -1,7 +1,7 @@
 # AI Business Assistant
 
 One evolving AI business-assistant app (customer-support chatbot first). Full roadmap: `docs/ROADMAP.md`.
-Current milestone: **V1** — see `docs/v1-architecture.md` (approved plan) and `docs/decisions.md`.
+Current milestone: **V1 complete** (`docs/v1-acceptance.md`); next is V2 (RAG) — see `docs/v1-architecture.md` (approved plan) and `docs/decisions.md`.
 
 ## Stack
 - Backend: Python 3.12 (uv) · FastAPI · Pydantic v2 · SQLAlchemy 2.0 async + asyncpg · Alembic · HTTPX · structlog
@@ -10,7 +10,8 @@ Current milestone: **V1** — see `docs/v1-architecture.md` (approved plan) and 
 - Tests: pytest + respx (provider mocks) · Playwright (e2e with `PROVIDER=fake`)
 
 ## Commands
-- DB: `docker compose up -d`. Shell into it with `docker exec -it ai-assistant-db-1 psql -U assistant -d assistant`.
+- Full stack: `./scripts/setup.sh` (or `.\scripts\setup.ps1`); UI on :8080. Self-check: `docker compose exec api python -m app.doctor`.
+- DB only (local dev/tests): `docker compose up -d db`. Shell into it with `docker exec -it ai-assistant-db-1 psql -U assistant -d assistant`.
 - uv is invoked as `python -m uv` on this machine (not on PATH).
 - Backend (from `backend/`): `python -m uv run pytest` · `python -m uv run uvicorn app.main:app --reload`
 - Live provider tests are opt-in: `python -m uv run pytest -m live` (needs `GROQ_API_KEY`).

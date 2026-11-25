@@ -45,12 +45,14 @@ class RequestContextMiddleware:
         try:
             await self.app(scope, receive, send_wrapper)
         finally:
-            log.info(
-                "request",
-                method=scope["method"],
-                path=scope["path"],
-                status=status,
-                duration_ms=round((time.perf_counter() - start) * 1000, 1),
-            )
+            # Container health probes run every few seconds; only log them when they fail.
+            if not (scope["path"].startswith("/health/") and status < 400):
+                log.info(
+                    "request",
+                    method=scope["method"],
+                    path=scope["path"],
+                    status=status,
+                    duration_ms=round((time.perf_counter() - start) * 1000, 1),
+                )
             # Context is cleared at the start of the next request rather than here, so the
             # outermost 500 handler (which runs after this middleware) can still read request_id.

@@ -11,7 +11,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.api import auth, chat, conversations, health, models
-from app.chat.service import release_abandoned_streams
+from app.chat.service import drain_background_tasks, release_abandoned_streams
 from app.core.config import Settings, get_settings
 from app.core.csrf import OriginCheckMiddleware
 from app.core.errors import install_error_handlers
@@ -51,6 +51,7 @@ def create_app(settings: Settings | None = None, provider: ProviderAdapter | Non
         try:
             yield
         finally:
+            await drain_background_tasks()
             if app.state.provider is not None:
                 await app.state.provider.aclose()
             await app.state.db.dispose()

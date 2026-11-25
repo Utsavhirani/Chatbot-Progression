@@ -429,3 +429,50 @@ async def test_reply_cut_off_by_max_tokens_is_flagged(alice: httpx.AsyncClient) 
     assert events[-1][0] == "done" and events[-1][1]["finish_reason"] == "length"
     stored = (await messages(alice, cid))[1]
     assert stored["status"] == "complete" and stored["error_code"] == "length_limit"
+
+
+async def test_dropped_history_is_summarised_in_background_and_reused(
+    make_app: Callable[..., Awaitable[FastAPI]],
+) -> None:
+    from app.chat.service import BACKGROUND_TASKS
+    from app.conversations.context import SUMMARY_PREFIX
+
+    app = await make_app(context_summarization=True, context_budget_tokens=400, summary_min_new_messages=2)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as c:
+        await c.post("/api/auth/register", json={"email": "s@example.com", "password": "password-123"})
+        cid = await new_conversation(c, system_prompt=None)
+        for i in range(6):
+            await send(c, cid, f"fact {i}: my order number is 10{i} " + "detail " * 25)
+            if BACKGROUND_TASKS:
+                await asyncio.gather(*BACKGROUND_TASKS)
+
+        async with app.state.db.sessionmaker() as db:
+            from app.db.models import Conversation
+
+            conv = await db.get(Conversation, uuid.UUID(cid))
+            calls = list(await db.scalars(select(LlmCall).where(LlmCall.status == "summary")))
+        assert conv.summary and conv.summary_through_seq >= 2
+        assert calls and calls[0].input_tokens  # summary calls are accounted for
+
+        resp = await send(c, cid, "what do you remember?")
+        assert resp.status_code == 200, resp.text
+        # The fake provider also records background summary calls; pick the chat request.
+        sent = next(
+            r
+            for r in reversed(app.state.provider.requests)
+            if r.messages[-1].content == "what do you remember?"
+        )
+        summary_msgs = [m for m in sent.messages if m.content.startswith(SUMMARY_PREFIX)]
+        assert len(summary_msgs) == 1 and sent.messages[0] == summary_msgs[0]
+        assert sum(len(m.content) // 4 + 7 for m in sent.messages) <= 400  # still within budget
+
+
+async def test_summarisation_is_off_by_default(alice: httpx.AsyncClient, app: FastAPI) -> None:
+    cid = await new_conversation(alice)
+    for i in range(3):
+        await send(alice, cid, f"message {i}")
+    async with app.state.db.sessionmaker() as db:
+        from app.db.models import Conversation
+
+        assert (await db.get(Conversation, uuid.UUID(cid))).summary is None
+    assert not any(m.content.startswith("Summary") for r in app.state.provider.requests for m in r.messages)

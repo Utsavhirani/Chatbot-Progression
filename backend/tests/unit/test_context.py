@@ -84,3 +84,39 @@ def test_message_that_cannot_fit_is_rejected_not_truncated() -> None:
     with pytest.raises(AppError) as exc:
         build_context(system_prompt="sys", history=[], user_message="y" * 5000, budget_tokens=500)
     assert exc.value.code == "message_too_long" and exc.value.status_code == 413
+
+
+def test_summary_is_included_after_system_prompt_and_counted() -> None:
+    from app.conversations.context import SUMMARY_PREFIX
+
+    ctx = build_context(
+        system_prompt="sys",
+        history=[H("user", "recent q")],
+        user_message="now",
+        budget_tokens=1000,
+        summary="S",
+    )
+    assert [(m.role, m.content) for m in ctx.messages] == [
+        ("system", "sys"),
+        ("system", SUMMARY_PREFIX + "S"),
+        ("user", "recent q"),
+        ("user", "now"),
+    ]
+
+
+def test_dropped_through_seq_points_at_newest_dropped_message() -> None:
+    @dataclass
+    class S(H):
+        seq: int = 0
+
+    long = "x" * 400
+    history = [
+        S("user", long, seq=1),
+        S("assistant", long, seq=2),
+        S("user", long, seq=3),
+        S("assistant", "a", seq=4),
+    ]
+    ctx = build_context(system_prompt=None, history=history, user_message="q", budget_tokens=130)
+    assert ctx.history_dropped == 2 and ctx.dropped_through_seq == 2
+    none_dropped = build_context(system_prompt=None, history=history[2:], user_message="q", budget_tokens=500)
+    assert none_dropped.dropped_through_seq is None

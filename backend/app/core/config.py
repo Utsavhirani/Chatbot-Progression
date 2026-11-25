@@ -54,6 +54,11 @@ class Settings(BaseSettings):
     context_safety_margin_tokens: int = Field(default=256, ge=0)
     max_message_chars: int = Field(default=8000, ge=1)
     chat_rate_per_minute: int = Field(default=20, ge=1)
+    # Summarise history that no longer fits the budget (one extra, non-streamed LLM call in the
+    # background after a reply, only once at least `summary_min_new_messages` new messages were dropped).
+    context_summarization: bool = False
+    summary_min_new_messages: int = Field(default=4, ge=1)
+    summary_max_tokens: int = Field(default=300, ge=50)
     # A reply still "streaming" after this long is considered abandoned (e.g. server crash).
     stale_stream_after_s: int = Field(default=300, ge=30)
 
@@ -76,9 +81,12 @@ class Settings(BaseSettings):
     def allowed_origin_set(self) -> frozenset[str]:
         return frozenset(o.strip().rstrip("/") for o in self.allowed_origins.split(",") if o.strip())
 
+    # None = secure cookies only when ENV=prod. Set false to allow plain-HTTP access (e.g. a LAN demo).
+    cookie_secure: bool | None = None
+
     @property
     def secure_cookies(self) -> bool:
-        return self.env == "prod"
+        return self.env == "prod" if self.cookie_secure is None else self.cookie_secure
 
 
 @lru_cache

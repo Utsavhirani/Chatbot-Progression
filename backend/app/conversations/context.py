@@ -36,6 +36,8 @@ class BuiltContext:
     estimated_tokens: int
     history_included: int
     history_dropped: int
+    # seq of the newest history message that did not fit (None if nothing was dropped)
+    dropped_through_seq: int | None = None
 
 
 def compute_budget(
@@ -56,16 +58,23 @@ def _usable(item: HistoryItem) -> ChatMessage | None:
     return None
 
 
+SUMMARY_PREFIX = "Summary of the earlier part of this conversation (older messages are not shown):\n"
+
+
 def build_context(
     *,
     system_prompt: str | None,
     history: Sequence[HistoryItem],
     user_message: str,
     budget_tokens: int,
+    summary: str | None = None,
 ) -> BuiltContext:
+    """`history` must already exclude messages covered by `summary` (see Conversation.summary_through_seq)."""
     fixed: list[ChatMessage] = []
     if system_prompt:
         fixed.append(ChatMessage("system", system_prompt))
+    if summary:
+        fixed.append(ChatMessage("system", SUMMARY_PREFIX + summary))
     current = ChatMessage("user", user_message)
     used = sum(estimate_message_tokens(m.content) for m in fixed) + estimate_message_tokens(current.content)
     if used > budget_tokens:
@@ -75,23 +84,30 @@ def build_context(
             status_code=413,
         )
 
-    candidates = [m for m in (_usable(h) for h in history) if m is not None]
-    selected: list[ChatMessage] = []
-    for msg in reversed(candidates):  # newest first
+    candidates = [(h, m) for h, m in ((h, _usable(h)) for h in history) if m is not None]
+    selected: list[tuple[HistoryItem, ChatMessage]] = []
+    for item, msg in reversed(candidates):  # newest first
         cost = estimate_message_tokens(msg.content)
         if used + cost > budget_tokens:
             break  # stop at the first message that does not fit: keep history contiguous
-        selected.append(msg)
+        selected.append((item, msg))
         used += cost
     selected.reverse()
 
     # Don't start the window with an orphaned assistant reply (its question was trimmed away).
-    while selected and selected[0].role == "assistant":
-        used -= estimate_message_tokens(selected.pop(0).content)
+    while selected and selected[0][1].role == "assistant":
+        used -= estimate_message_tokens(selected.pop(0)[1].content)
+
+    dropped = len(candidates) - len(selected)
+    dropped_through_seq: int | None = None
+    if dropped:
+        last_dropped = candidates[dropped - 1][0]
+        dropped_through_seq = getattr(last_dropped, "seq", None)
 
     return BuiltContext(
-        messages=[*fixed, *selected, current],
+        messages=[*fixed, *(m for _, m in selected), current],
         estimated_tokens=used,
         history_included=len(selected),
-        history_dropped=len(candidates) - len(selected),
+        history_dropped=dropped,
+        dropped_through_seq=dropped_through_seq,
     )

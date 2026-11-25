@@ -13,6 +13,7 @@ A turn has two phases:
 
 from __future__ import annotations
 
+import asyncio
 import time
 import uuid
 from collections.abc import AsyncIterator
@@ -35,6 +36,7 @@ from app.core.errors import AppError
 from app.core.logging import get_logger
 from app.db.models import Conversation, LlmCall, Message
 from app.providers.base import (
+    ChatMessage,
     ChatRequest,
     Finish,
     ProviderAdapter,
@@ -86,6 +88,8 @@ class Turn:
     estimated_input_tokens: int
     history_dropped: int
     user_message: dict[str, Any] | None = None  # present for new turns, not for retries
+    # When set, summarise history up to this seq in the background after a successful reply.
+    summarize_through_seq: int | None = None
     request_id: str | None = field(
         default_factory=lambda: structlog.contextvars.get_contextvars().get("request_id")
     )
@@ -166,6 +170,7 @@ class ChatService:
             request=request,
             estimated_input_tokens=built.estimated_tokens,
             history_dropped=built.history_dropped,
+            summarize_through_seq=self._summary_target(built),
             user_message={
                 "id": str(user_msg.id),
                 "seq": user_msg.seq,
@@ -215,6 +220,7 @@ class ChatService:
             request=request,
             estimated_input_tokens=built.estimated_tokens,
             history_dropped=built.history_dropped,
+            summarize_through_seq=self._summary_target(built),
         )
 
     # ------------------------------------------------------------------ phase 2: generate
@@ -307,6 +313,114 @@ class ChatService:
                     ttft_ms=ttft_ms,
                     latency_ms=_ms_since(start),
                 )
+            if status == "complete" and turn.summarize_through_seq is not None:
+                self._schedule_summary(turn)
+
+    # ------------------------------------------------------------------ summaries
+
+    def _summary_target(self, built: Any) -> int | None:
+        if not self.settings.context_summarization:
+            return None
+        if built.history_dropped < self.settings.summary_min_new_messages:
+            return None
+        return built.dropped_through_seq
+
+    def _schedule_summary(self, turn: Turn) -> None:
+        task = asyncio.create_task(
+            self._summarize(turn.user_id, turn.conversation_id, turn.summarize_through_seq)
+        )
+        BACKGROUND_TASKS.add(task)
+        task.add_done_callback(BACKGROUND_TASKS.discard)
+
+    async def _summarize(
+        self, user_id: uuid.UUID, conversation_id: uuid.UUID, through_seq: int | None
+    ) -> None:
+        """Fold messages (previous summary point, through_seq] into the conversation summary."""
+        if through_seq is None:
+            return
+        start = time.perf_counter()
+        try:
+            async with self.sessionmaker() as db:
+                conversation = await db.scalar(
+                    select(Conversation).where(
+                        Conversation.id == conversation_id, Conversation.user_id == user_id
+                    )
+                )
+                if conversation is None:
+                    return
+                done_through = conversation.summary_through_seq or 0
+                if through_seq <= done_through:
+                    return  # already covered (e.g. by a concurrent run)
+                rows = list(
+                    await db.scalars(
+                        select(Message)
+                        .where(
+                            Message.conversation_id == conversation_id,
+                            Message.seq > done_through,
+                            Message.seq <= through_seq,
+                            Message.status.in_(("complete", "partial", "cancelled")),
+                        )
+                        .order_by(Message.seq)
+                    )
+                )
+                lines = [
+                    ("Customer: " if m.role == "user" else "Assistant: ") + m.content
+                    for m in rows
+                    if m.content
+                ]
+                # Keep the summarisation request itself within the context budget.
+                transcript = "\n".join(lines)[-max(1000, self.settings.context_budget_tokens * 3) :]
+                model = self.registry.get(
+                    (conversation.settings or {}).get("model") or self.registry.default_model
+                )
+                previous = f"Existing summary:\n{conversation.summary}\n\n" if conversation.summary else ""
+                result = await self.provider.complete(
+                    ChatRequest(
+                        model=model.id,
+                        messages=[
+                            ChatMessage("system", SUMMARY_INSTRUCTIONS),
+                            ChatMessage("user", f"{previous}New messages:\n{transcript}"),
+                        ],
+                        max_tokens=self.settings.summary_max_tokens,
+                        temperature=0.2,
+                        reasoning_effort=model.reasoning_effort if model.reasoning else None,
+                    )
+                )
+                summary = result.text.strip()
+                if summary:
+                    await db.execute(
+                        update(Conversation)
+                        .where(
+                            Conversation.id == conversation_id,
+                            # optimistic check: never overwrite a newer summary
+                            func.coalesce(Conversation.summary_through_seq, 0) == done_through,
+                        )
+                        .values(summary=summary, summary_through_seq=through_seq)
+                    )
+                usage = result.usage
+                db.add(
+                    LlmCall(
+                        user_id=user_id,
+                        conversation_id=conversation_id,
+                        provider=self.provider.name,
+                        model=model.id,
+                        input_tokens=usage.input_tokens if usage else None,
+                        output_tokens=usage.output_tokens if usage else None,
+                        total_tokens=usage.total_tokens if usage else None,
+                        usage_source="provider" if usage else "none",
+                        latency_ms=_ms_since(start),
+                        attempts=result.attempts,
+                        status="summary",
+                    )
+                )
+                await db.commit()
+                log.info(
+                    "chat.summary_updated", conversation_id=str(conversation_id), through_seq=through_seq
+                )
+        except Exception as exc:  # best effort: the next turn simply trims again
+            log.warning(
+                "chat.summary_failed", conversation_id=str(conversation_id), error_type=type(exc).__name__
+            )
 
     # ------------------------------------------------------------------ helpers
 
@@ -320,8 +434,20 @@ class ChatService:
             max_output_tokens=max_tokens,
             safety_margin=self.settings.context_safety_margin_tokens,
         )
+        summary = conversation.summary if self.settings.context_summarization else None
+        if summary:
+            # A summary may never crowd out the current message: cap it at a third of the budget.
+            max_chars = int(budget / 3 * 4)
+            if len(summary) > max_chars:
+                summary = summary[: max(0, max_chars - 1)].rstrip() + "…"
+        if summary and conversation.summary_through_seq:
+            history = [m for m in history if m.seq > conversation.summary_through_seq]
         built = build_context(
-            system_prompt=conversation.system_prompt, history=history, user_message=text, budget_tokens=budget
+            system_prompt=conversation.system_prompt,
+            history=history,
+            user_message=text,
+            budget_tokens=budget,
+            summary=summary,
         )
         # Free-tier guard: one request larger than the per-minute token limit can never succeed.
         ceiling = model.per_request_token_ceiling
@@ -487,6 +613,22 @@ async def release_abandoned_streams(sessionmaker: async_sessionmaker[AsyncSessio
         )
         await db.commit()
         return result.rowcount or 0
+
+
+BACKGROUND_TASKS: set[asyncio.Task[None]] = set()
+
+SUMMARY_INSTRUCTIONS = (
+    "You maintain the memory of a customer-support conversation. Update the summary with the new "
+    "messages. Keep concrete facts the customer gave (names, order numbers, products, dates, problems, "
+    "preferences) and what the assistant already answered or promised. Do not add anything that was not "
+    "said. Plain text, at most 150 words."
+)
+
+
+async def drain_background_tasks(timeout_s: float = 10.0) -> None:
+    """Give in-flight summaries a chance to finish on shutdown."""
+    if BACKGROUND_TASKS:
+        await asyncio.wait(list(BACKGROUND_TASKS), timeout=timeout_s)
 
 
 def _outcome_code(

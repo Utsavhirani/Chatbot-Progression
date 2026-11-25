@@ -204,7 +204,7 @@ Database: local Docker Postgres on `localhost:5433`, started with `docker compos
 | **2. Persistence + auth** ✅ | models, Alembic 0001 on local Postgres, auth endpoints, conversations CRUD with ownership | integration tests green |
 | **3. Chat orchestration** ✅ | SSE chat endpoint, idempotency, cancel, retry, usage rows, context trimming, rate limits | integration tests green; curl demo streams |
 | **4. Frontend** ✅ | Vite + TS + Tailwind + shadcn + assistant-ui, auth pages, thread list, streaming chat, settings panel | manual demo; Playwright green |
-| **5. Hardening** | optional summarization, stale-stream sweeper, README, test matrix, acceptance review against §8 (14 criteria) | every §8 criterion checked and reported (pass / limitation) |
+| **5. Hardening** ✅ | optional summarization, stale-stream sweeper, README, test matrix, acceptance review against §8 (14 criteria) | every §8 criterion checked and reported (pass / limitation) |
 
 Each step is reported in the roadmap format (Goal / Current state / Plan / Decisions / Implementation / Verification / Limitations / Next step).
 
@@ -217,3 +217,10 @@ Each step is reported in the roadmap format (Goal / Current state / Plan / Decis
 - `uv run pytest -m live` passes with a real key.
 - Manual run: `uv run uvicorn app.main:app` + `npm run dev`. Register two users, chat with streaming, refresh, check isolation, kill the network mid-stream, then Retry.
 - `llm_calls` rows show tokens and latency, and the logs contain no secrets.
+
+## Addendum: delivered beyond the original plan
+- **Docker deployment:** a full-stack `docker-compose.yml` with `db`, `api` and `web` (nginx). The api entrypoint waits for the DB and runs migrations. Health checks and `restart: unless-stopped` are set on every service.
+- **Self-check:** `python -m app.doctor` checks config, DB connectivity, extensions, migration state, the Groq key and model availability, with an optional live call.
+- **One-command setup:** `scripts/setup.sh` and `scripts/setup.ps1` (with a `--check` mode), verified from a fresh clone.
+- **Product fixes from real-Groq testing:** a default support system prompt, and a note on replies cut off by the length limit.
+- **Optional history summarisation:** background, off by default, capped at a third of the budget.
