@@ -10,7 +10,8 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app.api import auth, conversations, health, models
+from app.api import auth, chat, conversations, health, models
+from app.chat.service import release_abandoned_streams
 from app.core.config import Settings, get_settings
 from app.core.csrf import OriginCheckMiddleware
 from app.core.errors import install_error_handlers
@@ -32,6 +33,12 @@ def create_app(settings: Settings | None = None, provider: ProviderAdapter | Non
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.db = Database(settings)
+        try:
+            released = await release_abandoned_streams(app.state.db.sessionmaker)
+            if released:
+                log.warning("chat.abandoned_streams_released", count=released)
+        except Exception as exc:  # DB may be down at startup; /health/ready will report it
+            log.warning("startup.db_unavailable", error_type=type(exc).__name__)
         app.state.provider = provider if provider is not None else build_provider(settings)
         if app.state.provider is None:
             log.warning("provider.not_configured", provider=settings.provider)
@@ -54,12 +61,13 @@ def create_app(settings: Settings | None = None, provider: ProviderAdapter | Non
     app.state.provider = None
     app.state.login_limiter = RateLimiter(settings.login_rate_per_minute, 60)
     app.state.register_limiter = RateLimiter(settings.register_rate_per_minute, 60)
+    app.state.chat_limiter = RateLimiter(settings.chat_rate_per_minute, 60)
 
     # Added last = outermost: request IDs exist even for CSRF rejections.
     app.add_middleware(OriginCheckMiddleware, allowed_origins=settings.allowed_origin_set)
     app.add_middleware(RequestContextMiddleware)
     install_error_handlers(app)
-    for router in (health.router, models.router, auth.router, conversations.router):
+    for router in (health.router, models.router, auth.router, conversations.router, chat.router):
         app.include_router(router)
     return app
 

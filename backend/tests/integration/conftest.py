@@ -25,6 +25,7 @@ from app.providers.fake import FakeProvider
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 TEST_DB_URL = Settings().test_database_url
+_DEFAULT = object()
 TABLES = ", ".join(t.name for t in reversed(Base.metadata.sorted_tables))
 
 
@@ -65,6 +66,7 @@ def test_settings(**overrides: object) -> Settings:
         "allowed_origins": "http://localhost:5173",
         "login_rate_per_minute": 1000,
         "register_rate_per_minute": 1000,
+        "chat_rate_per_minute": 1000,
     }
     return Settings(**{**base, **overrides})
 
@@ -79,8 +81,10 @@ async def make_app(migrated_db: str) -> AsyncIterator[Callable[..., Awaitable[Fa
 
     contexts = []
 
-    async def _make(**overrides: object) -> FastAPI:
-        app = create_app(test_settings(**overrides), provider=FakeProvider(chunk_delay_s=0))
+    async def _make(provider_obj: object = _DEFAULT, **overrides: object) -> FastAPI:
+        """`provider_obj=None` lets the app build its provider from settings (e.g. unconfigured Groq)."""
+        chosen = FakeProvider(chunk_delay_s=0) if provider_obj is _DEFAULT else provider_obj
+        app = create_app(test_settings(**overrides), provider=chosen)
         ctx = app.router.lifespan_context(app)
         await ctx.__aenter__()
         contexts.append(ctx)

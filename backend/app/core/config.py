@@ -40,6 +40,14 @@ class Settings(BaseSettings):
     # Overall deadline for one generation, including retries.
     provider_total_timeout_s: float = Field(default=120.0, gt=0)
 
+    # --- Chat / context (defaults sized for Groq free tier, docs/providers.md) ---
+    context_budget_tokens: int = Field(default=3000, ge=256)
+    context_safety_margin_tokens: int = Field(default=256, ge=0)
+    max_message_chars: int = Field(default=8000, ge=1)
+    chat_rate_per_minute: int = Field(default=20, ge=1)
+    # A reply still "streaming" after this long is considered abandoned (e.g. server crash).
+    stale_stream_after_s: int = Field(default=300, ge=30)
+
     # --- Database --------------------------------------------------------
     database_url: str = "postgresql+asyncpg://assistant:assistant_dev_pw@127.0.0.1:5433/assistant"
     test_database_url: str = "postgresql+asyncpg://assistant:assistant_dev_pw@127.0.0.1:5433/assistant_test"

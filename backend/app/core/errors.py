@@ -27,6 +27,7 @@ class AppError(Exception):
         status_code: int = 400,
         retryable: bool = False,
         headers: dict[str, str] | None = None,
+        details: dict[str, Any] | None = None,
     ) -> None:
         super().__init__(message)
         self.code = code
@@ -34,6 +35,7 @@ class AppError(Exception):
         self.status_code = status_code
         self.retryable = retryable
         self.headers = headers
+        self.details = details
 
 
 def _request_id() -> str | None:
@@ -56,7 +58,11 @@ def install_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(AppError)
     async def _app_error(_: Request, exc: AppError) -> JSONResponse:
         return JSONResponse(
-            error_body(exc.code, exc.message, exc.retryable), exc.status_code, headers=exc.headers
+            error_body(
+                exc.code, exc.message, exc.retryable, **({"details": exc.details} if exc.details else {})
+            ),
+            exc.status_code,
+            headers=exc.headers,
         )
 
     @app.exception_handler(RequestValidationError)

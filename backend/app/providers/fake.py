@@ -11,6 +11,8 @@ by putting a marker anywhere in the last user message:
     [fake:malformed]    -> ProviderMalformedResponse
     [fake:cut]          -> emits part of the reply, then ProviderStreamInterrupted
     [fake:slow]         -> streams with a longer per-chunk delay (for cancel tests)
+
+Tests can also queue one-shot failures: `provider.fail_next.append(ProviderUnavailable(...))`.
 """
 
 from __future__ import annotations
@@ -56,6 +58,8 @@ class FakeProvider:
         self.chunk_delay_s = chunk_delay_s
         self.slow_delay_s = slow_delay_s
         self.requests: list[ChatRequest] = []  # recorded for test assertions
+        # Errors raised (once each, in order) by the next stream() calls, before any output.
+        self.fail_next: list[ProviderError] = []
 
     async def aclose(self) -> None:
         return None
@@ -75,6 +79,8 @@ class FakeProvider:
 
     async def stream(self, request: ChatRequest) -> AsyncIterator[StreamEvent]:
         self.requests.append(request)
+        if self.fail_next:
+            raise self.fail_next.pop(0)
         markers = set(_MARKER.findall(self._last_user(request)))
         for name, err in _FAILURES.items():
             if name in markers:
