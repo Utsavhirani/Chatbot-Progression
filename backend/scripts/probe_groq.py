@@ -21,7 +21,7 @@ import json
 import os
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -122,7 +122,7 @@ class Probe:
                 if not line.startswith("data:"):
                     bad_lines.append(line[:200])
                     continue
-                data = line[len("data:"):].strip()
+                data = line[len("data:") :].strip()
                 if data == "[DONE]":
                     saw_done = True
                     break
@@ -191,7 +191,10 @@ class Probe:
             "ok": True,
             "tool_called": bool(calls),
             "tool_calls": [
-                {"name": c.get("function", {}).get("name"), "arguments": c.get("function", {}).get("arguments")}
+                {
+                    "name": c.get("function", {}).get("name"),
+                    "arguments": c.get("function", {}).get("arguments"),
+                }
                 for c in calls
             ],
             "content": msg.get("content"),
@@ -253,8 +256,10 @@ class Probe:
     # ---- context size -------------------------------------------------
     def context(self, model: str, approx_tokens: int) -> dict[str, Any]:
         # ~4 chars per token of filler; ask a question answerable only from the start.
-        filler = ("The quick brown fox jumps over the lazy dog. " * (approx_tokens // 10 + 1))
-        prompt = "Remember the code word: AMBER-42.\n" + filler + "\nWhat was the code word? Reply with it only."
+        filler = "The quick brown fox jumps over the lazy dog. " * (approx_tokens // 10 + 1)
+        prompt = (
+            "Remember the code word: AMBER-42.\n" + filler + "\nWhat was the code word? Reply with it only."
+        )
         payload = {
             "model": model,
             "messages": [{"role": "user", "content": prompt}],
@@ -274,15 +279,18 @@ class Probe:
             "approx_tokens": approx_tokens,
             "chars": len(prompt),
             "prompt_tokens": usage.get("prompt_tokens"),
-            "chars_per_token": round(len(prompt) / usage["prompt_tokens"], 2) if usage.get("prompt_tokens") else None,
+            "chars_per_token": round(len(prompt) / usage["prompt_tokens"], 2)
+            if usage.get("prompt_tokens")
+            else None,
             "recalled": "AMBER-42" in content,
             "latency_ms": latency_ms,
         }
 
 
 def probe_invalid_key(base_url: str) -> dict[str, Any]:
-    with httpx.Client(base_url=base_url, timeout=TIMEOUT,
-                      headers={"Authorization": "Bearer invalid-key-for-probe"}) as c:
+    with httpx.Client(
+        base_url=base_url, timeout=TIMEOUT, headers={"Authorization": "Bearer invalid-key-for-probe"}
+    ) as c:
         resp = c.get("/models")
         return safe_error(resp)
 
@@ -293,8 +301,12 @@ def probe_bad_request(client: httpx.Client) -> dict[str, Any]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--models", nargs="*", help="Model IDs to probe (default: all chat-like models listed)")
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument(
+        "--models", nargs="*", help="Model IDs to probe (default: all chat-like models listed)"
+    )
     parser.add_argument("--context", action="store_true", help="Also probe ~4k and ~8k token prompts")
     parser.add_argument("--list-only", action="store_true")
     args = parser.parse_args()
@@ -307,12 +319,13 @@ def main() -> int:
         return 2
 
     results: dict[str, Any] = {
-        "probed_at": datetime.now(timezone.utc).isoformat(),
+        "probed_at": datetime.now(UTC).isoformat(),
         "base_url": base_url,
         "models": {},
     }
-    with httpx.Client(base_url=base_url, timeout=TIMEOUT,
-                      headers={"Authorization": f"Bearer {api_key}"}) as client:
+    with httpx.Client(
+        base_url=base_url, timeout=TIMEOUT, headers={"Authorization": f"Bearer {api_key}"}
+    ) as client:
         p = Probe(client)
         listing = p.list_models()
         results["model_list"] = listing
@@ -322,8 +335,10 @@ def main() -> int:
 
         print(f"{'model id':45} {'owner':15} {'context':>8} active")
         for m in sorted(listing["models"], key=lambda m: m.get("id", "")):
-            print(f"{m.get('id', ''):45} {str(m.get('owned_by', '')):15} "
-                  f"{str(m.get('context_window', '')):>8} {m.get('active', '')}")
+            print(
+                f"{m.get('id', ''):45} {str(m.get('owned_by', '')):15} "
+                f"{str(m.get('context_window', '')):>8} {m.get('active', '')}"
+            )
         if args.list_only:
             _save(results)
             return 0
@@ -332,7 +347,8 @@ def main() -> int:
             targets = args.models
         else:
             targets = sorted(
-                m["id"] for m in listing["models"]
+                m["id"]
+                for m in listing["models"]
                 if m.get("active", True) and not any(k in m["id"].lower() for k in NON_CHAT_MARKERS)
             )
         print(f"\nProbing {len(targets)} model(s): {', '.join(targets)}\n")
@@ -341,14 +357,20 @@ def main() -> int:
             print(f"== {model}")
             r: dict[str, Any] = {}
             for name, fn in [
-                ("chat", lambda: p.chat(model)),
-                ("stream_plain", lambda: p.stream(model, include_usage_option=False)),
-                ("stream_with_usage_option", lambda: p.stream(model, include_usage_option=True)),
-                ("tools", lambda: p.tools(model)),
-                ("json_mode", lambda: p.json_mode(model)),
-                ("json_schema", lambda: p.json_schema(model)),
-            ] + ([("context_4k", lambda: p.context(model, 4000)),
-                  ("context_8k", lambda: p.context(model, 8000))] if args.context else []):
+                ("chat", lambda model=model: p.chat(model)),
+                ("stream_plain", lambda model=model: p.stream(model, include_usage_option=False)),
+                ("stream_with_usage_option", lambda model=model: p.stream(model, include_usage_option=True)),
+                ("tools", lambda model=model: p.tools(model)),
+                ("json_mode", lambda model=model: p.json_mode(model)),
+                ("json_schema", lambda model=model: p.json_schema(model)),
+            ] + (
+                [
+                    ("context_4k", lambda model=model: p.context(model, 4000)),
+                    ("context_8k", lambda model=model: p.context(model, 8000)),
+                ]
+                if args.context
+                else []
+            ):
                 try:
                     r[name] = fn()
                 except httpx.HTTPError as exc:
@@ -371,12 +393,16 @@ def main() -> int:
 
 def _summary(name: str, r: dict[str, Any]) -> str:
     if not r.get("ok"):
-        return f"FAIL {r.get('status', r.get('exception'))}: {json.dumps(r.get('body', r.get('detail')))[:120]}"
+        return (
+            f"FAIL {r.get('status', r.get('exception'))}: {json.dumps(r.get('body', r.get('detail')))[:120]}"
+        )
     if name == "chat":
         return f"ok {r['latency_ms']}ms content={r['content']!r} usage={r['usage']}"
     if name.startswith("stream"):
-        return (f"ok ttft={r['ttft_ms']}ms total={r['total_ms']}ms chunks={r['chunks']} "
-                f"done={r['saw_done_sentinel']} usage_in={list(r['usage_found_in'])}")
+        return (
+            f"ok ttft={r['ttft_ms']}ms total={r['total_ms']}ms chunks={r['chunks']} "
+            f"done={r['saw_done_sentinel']} usage_in={list(r['usage_found_in'])}"
+        )
     if name == "tools":
         return f"ok tool_called={r['tool_called']} {r['tool_calls']}"
     if name == "json_mode":
@@ -384,8 +410,10 @@ def _summary(name: str, r: dict[str, Any]) -> str:
     if name == "json_schema":
         return f"ok schema_valid={r['schema_valid']}"
     if name.startswith("context"):
-        return (f"ok prompt_tokens={r['prompt_tokens']} chars/token={r['chars_per_token']} "
-                f"recalled={r['recalled']} {r['latency_ms']}ms")
+        return (
+            f"ok prompt_tokens={r['prompt_tokens']} chars/token={r['chars_per_token']} "
+            f"recalled={r['recalled']} {r['latency_ms']}ms"
+        )
     return "ok"
 
 

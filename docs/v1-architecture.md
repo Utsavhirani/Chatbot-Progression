@@ -200,7 +200,7 @@ Database: local Docker Postgres on `localhost:5433`, started with `docker compos
 |---|---|---|
 | **0. Setup** ✅ | git init, .gitignore, CLAUDE.md, docs/ (roadmap moved and fixed), Python 3.12 via uv, docker-compose Postgres, `.env` | Python 3.12.16 ✅; DB healthy with both DBs ✅ |
 | **0b. Groq probe** ✅ | `scripts/probe_groq.py`: list models; chat, stream, usage fields, tool call, JSON mode, ~4k/8k-token contexts, 429 headers | `docs/providers.md` + `models.toml` filled from real output; default model chosen |
-| **1. Provider core** | FastAPI skeleton, config, logging, health, provider base/groq/fake/retry | unit tests green; live test passes |
+| **1. Provider core** ✅ | FastAPI skeleton, config, logging, health, provider base/groq/fake/retry | unit tests green; live test passes |
 | **2. Persistence + auth** | models, Alembic 0001 on local Postgres, auth endpoints, conversations CRUD with ownership | integration tests green |
 | **3. Chat orchestration** | SSE chat endpoint, idempotency, cancel, retry, usage rows, context trimming, rate limits | integration tests green; curl demo streams |
 | **4. Frontend** | Vite + TS + Tailwind + shadcn + assistant-ui, auth pages, thread list, streaming chat, settings panel | manual demo; Playwright green |
