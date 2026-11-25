@@ -1,0 +1,27 @@
+# Local Postgres (with pgvector, needed from V2) for development AND tests.
+# Databases: `assistant` (dev) and `assistant_test` (pytest, wiped by tests).
+# Start: docker compose up -d   ·   Stop: docker compose stop   ·   Reset data: docker compose down -v
+name: ai-assistant
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-assistant}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-assistant_dev_pw}
+      POSTGRES_DB: assistant
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5433}:5432"   # localhost only; 5433 avoids clashing with any native Postgres
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
+    command: ["postgres", "-c", "shared_buffers=128MB", "-c", "max_connections=50"]   # modest RAM on a 7 GB machine
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d assistant"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  pgdata:

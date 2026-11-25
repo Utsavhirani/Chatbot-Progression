@@ -1,0 +1,53 @@
+# Model registry — allowlist + verified capabilities.
+# Source: docs/providers.md (probe of 2026-11-25). Do not add values that were not observed.
+# Rate limits are account/tier-specific and may change; they guide budgeting, not guarantees.
+
+default_model = "qwen/qwen3.8-27b"
+
+[models."qwen/qwen3.8-27b"]
+provider = "groq"
+display_name = "Qwen 3.8 27B (fast, default)"
+context_window = 131072
+max_output_tokens = 4096          # app-side cap; provider max not yet probed
+default_max_tokens = 800
+chat = true
+streaming = true
+tools = true
+json_object = true
+json_schema = true
+vision = false                    # not probed
+reasoning = false
+tokens_per_minute = 8000
+input_tokens_per_minute = 7000
+
+[models."openai/gpt-oss-20b"]
+provider = "groq"
+display_name = "GPT-OSS 20B (reasoning)"
+context_window = 131072
+max_output_tokens = 4096
+default_max_tokens = 1000         # reasoning tokens count against this
+chat = true
+streaming = true
+tools = true
+json_object = true
+json_schema = true
+vision = false
+reasoning = true
+reasoning_effort = "low"
+tokens_per_minute = 8000
+
+[models."openai/gpt-oss-120b"]
+provider = "groq"
+display_name = "GPT-OSS 120B (reasoning, slower)"
+context_window = 131072
+max_output_tokens = 4096
+default_max_tokens = 1000
+chat = true
+streaming = true
+tools = true
+json_object = true
+json_schema = true
+vision = false
+reasoning = true
+reasoning_effort = "low"
+tokens_per_minute = 8000

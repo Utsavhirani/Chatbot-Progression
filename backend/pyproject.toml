@@ -1,0 +1,16 @@
+[project]
+name = "ai-assistant-backend"
+version = "0.1.0"
+description = "AI business assistant backend (FastAPI)"
+authors = [
+    { name = "Utsav Hirani", email = "utsavhiranilj@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "httpx>=0.28.1",
+    "python-dotenv>=1.2.4",
+]
+
+
+[tool.uv]
+package = false
