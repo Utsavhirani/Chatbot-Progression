@@ -1,0 +1,84 @@
+@import "tailwindcss";
+
+/* Design tokens (shadcn/ui convention). Light by default, dark via prefers-color-scheme. */
+:root {
+  --background: oklch(0.99 0 0);
+  --foreground: oklch(0.2 0.01 260);
+  --muted: oklch(0.96 0.005 260);
+  --muted-foreground: oklch(0.5 0.015 260);
+  --card: oklch(1 0 0);
+  --border: oklch(0.91 0.005 260);
+  --primary: oklch(0.45 0.16 265);
+  --primary-foreground: oklch(0.99 0 0);
+  --accent: oklch(0.95 0.02 265);
+  --destructive: oklch(0.55 0.2 27);
+  --destructive-muted: oklch(0.96 0.03 27);
+  --ring: oklch(0.6 0.15 265);
+  --radius: 0.65rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: oklch(0.17 0.01 260);
+    --foreground: oklch(0.95 0.005 260);
+    --muted: oklch(0.23 0.01 260);
+    --muted-foreground: oklch(0.7 0.015 260);
+    --card: oklch(0.2 0.01 260);
+    --border: oklch(0.3 0.01 260);
+    --primary: oklch(0.7 0.14 265);
+    --primary-foreground: oklch(0.15 0.01 260);
+    --accent: oklch(0.27 0.03 265);
+    --destructive: oklch(0.68 0.18 27);
+    --destructive-muted: oklch(0.28 0.06 27);
+    --ring: oklch(0.7 0.14 265);
+  }
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-card: var(--card);
+  --color-border: var(--border);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-accent: var(--accent);
+  --color-destructive: var(--destructive);
+  --color-destructive-muted: var(--destructive-muted);
+  --color-ring: var(--ring);
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    background: var(--color-background);
+    color: var(--color-foreground);
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+/* Markdown inside assistant replies */
+.prose-chat > * + * { margin-top: 0.6em; }
+.prose-chat ul { list-style: disc; padding-left: 1.4em; }
+.prose-chat ol { list-style: decimal; padding-left: 1.4em; }
+.prose-chat li + li { margin-top: 0.2em; }
+.prose-chat strong { font-weight: 600; }
+.prose-chat a { color: var(--color-primary); text-decoration: underline; }
+.prose-chat h1, .prose-chat h2, .prose-chat h3 { font-weight: 600; }
+.prose-chat code { font-family: ui-monospace, monospace; font-size: 0.9em; background: var(--color-muted); padding: 0.1em 0.3em; border-radius: 4px; }
+.prose-chat pre { background: var(--color-muted); padding: 0.75em; border-radius: 8px; overflow-x: auto; }
+.prose-chat pre code { background: none; padding: 0; }
+.prose-chat table { border-collapse: collapse; }
+.prose-chat th, .prose-chat td { border: 1px solid var(--color-border); padding: 0.3em 0.6em; }

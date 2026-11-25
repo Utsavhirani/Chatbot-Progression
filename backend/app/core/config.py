@@ -40,6 +40,15 @@ class Settings(BaseSettings):
     # Overall deadline for one generation, including retries.
     provider_total_timeout_s: float = Field(default=120.0, gt=0)
 
+    # Applied to new conversations that don't specify their own system prompt.
+    default_system_prompt: str = (
+        "You are a friendly, professional customer-support assistant for a business. "
+        "Answer clearly and concisely: prefer short paragraphs or brief lists, and keep most replies "
+        "under 200 words unless the customer asks for detail. If you need information you do not have "
+        "(such as order details or account data), say so and ask for it or suggest how to get help. "
+        "Never invent policies, prices, order statuses or contact details."
+    )
+
     # --- Chat / context (defaults sized for Groq free tier, docs/providers.md) ---
     context_budget_tokens: int = Field(default=3000, ge=256)
     context_safety_margin_tokens: int = Field(default=256, ge=0)

@@ -82,12 +82,17 @@ async def get_owned(
 
 
 async def create(
-    db: AsyncSession, registry: ModelRegistry, user_id: uuid.UUID, data: ConversationCreate
+    db: AsyncSession,
+    registry: ModelRegistry,
+    user_id: uuid.UUID,
+    data: ConversationCreate,
+    default_system_prompt: str | None = None,
 ) -> Conversation:
+    system_prompt = data.system_prompt if "system_prompt" in data.model_fields_set else default_system_prompt
     conversation = Conversation(
         user_id=user_id,
         title=data.title or DEFAULT_TITLE,
-        system_prompt=data.system_prompt,
+        system_prompt=system_prompt or None,
         settings=resolve_settings(registry, data.settings),
     )
     db.add(conversation)

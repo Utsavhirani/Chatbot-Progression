@@ -11,6 +11,8 @@ by putting a marker anywhere in the last user message:
     [fake:malformed]    -> ProviderMalformedResponse
     [fake:cut]          -> emits part of the reply, then ProviderStreamInterrupted
     [fake:slow]         -> streams with a longer per-chunk delay (for cancel tests)
+    [fake:fail_once]    -> ProviderUnavailable the first time a given message is seen, then succeeds
+    [fake:length]       -> completes with finish_reason "length" (reply cut off by max_tokens)
 
 Tests can also queue one-shot failures: `provider.fail_next.append(ProviderUnavailable(...))`.
 """
@@ -60,6 +62,7 @@ class FakeProvider:
         self.requests: list[ChatRequest] = []  # recorded for test assertions
         # Errors raised (once each, in order) by the next stream() calls, before any output.
         self.fail_next: list[ProviderError] = []
+        self._failed_once: set[str] = set()
 
     async def aclose(self) -> None:
         return None
@@ -82,6 +85,9 @@ class FakeProvider:
         if self.fail_next:
             raise self.fail_next.pop(0)
         markers = set(_MARKER.findall(self._last_user(request)))
+        if "fail_once" in markers and self._last_user(request) not in self._failed_once:
+            self._failed_once.add(self._last_user(request))
+            raise ProviderUnavailable("Fake one-time outage.", status_code=503)
         for name, err in _FAILURES.items():
             if name in markers:
                 raise type(err)(err.message, status_code=err.status_code, retry_after=err.retry_after)
@@ -95,7 +101,7 @@ class FakeProvider:
                 await asyncio.sleep(delay)
             yield TextDelta(word if i == 0 else " " + word)
         yield UsageEvent(self._usage(request, reply))
-        yield Finish(reason="stop", attempts=1)
+        yield Finish(reason="length" if "length" in markers else "stop", attempts=1)
 
     async def complete(self, request: ChatRequest) -> ChatResult:
         text: list[str] = []

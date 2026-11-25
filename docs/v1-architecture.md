@@ -203,7 +203,7 @@ Database: local Docker Postgres on `localhost:5433`, started with `docker compos
 | **1. Provider core** ✅ | FastAPI skeleton, config, logging, health, provider base/groq/fake/retry | unit tests green; live test passes |
 | **2. Persistence + auth** ✅ | models, Alembic 0001 on local Postgres, auth endpoints, conversations CRUD with ownership | integration tests green |
 | **3. Chat orchestration** ✅ | SSE chat endpoint, idempotency, cancel, retry, usage rows, context trimming, rate limits | integration tests green; curl demo streams |
-| **4. Frontend** | Vite + TS + Tailwind + shadcn + assistant-ui, auth pages, thread list, streaming chat, settings panel | manual demo; Playwright green |
+| **4. Frontend** ✅ | Vite + TS + Tailwind + shadcn + assistant-ui, auth pages, thread list, streaming chat, settings panel | manual demo; Playwright green |
 | **5. Hardening** | optional summarization, stale-stream sweeper, README, test matrix, acceptance review against §8 (14 criteria) | every §8 criterion checked and reported (pass / limitation) |
 
 Each step is reported in the roadmap format (Goal / Current state / Plan / Decisions / Implementation / Verification / Limitations / Next step).

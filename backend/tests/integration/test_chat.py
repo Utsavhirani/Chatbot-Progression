@@ -421,3 +421,11 @@ async def test_task_cancellation_still_persists_outcome(alice: httpx.AsyncClient
         await task
     stored = (await messages(alice, cid))[1]
     assert stored["status"] == "cancelled" and stored["content"]
+
+
+async def test_reply_cut_off_by_max_tokens_is_flagged(alice: httpx.AsyncClient) -> None:
+    cid = await new_conversation(alice)
+    events = parse_sse((await send(alice, cid, "tell me everything [fake:length]")).text)
+    assert events[-1][0] == "done" and events[-1][1]["finish_reason"] == "length"
+    stored = (await messages(alice, cid))[1]
+    assert stored["status"] == "complete" and stored["error_code"] == "length_limit"

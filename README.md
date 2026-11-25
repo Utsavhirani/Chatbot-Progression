@@ -3,11 +3,11 @@
 A business customer-support assistant that grows over several versions: chat → RAG → evaluation → tools → memory → production readiness.
 See `docs/ROADMAP.md`. The current milestone is **V1**; its plan is in `docs/v1-architecture.md`, and design decisions are in `docs/decisions.md`.
 
-> Status: **V1, Step 3 done.** The backend is complete for V1: authentication, conversations, and streaming chat with retry, cancellation, context budgeting and usage accounting. Next is Step 4: the React frontend.
+> Status: **V1, Step 4 done.** The full app runs end to end: a React chat UI over the FastAPI backend. Next is Step 5: hardening and the V1 acceptance review.
 
 ## Prerequisites
 - Python 3.12 via [uv](https://docs.astral.sh/uv/). On this machine uv is run as `python -m uv`.
-- Node 22+ (frontend, later step)
+- Node 22+ (frontend)
 - Docker Desktop (runs the local Postgres)
 - A GroqCloud API key
 
@@ -30,7 +30,16 @@ python -m uv run python scripts/probe_groq.py --models <id> <id>
 ```
 Raw results are written to `backend/scripts/probe_results/`. The summary goes in `docs/providers.md`.
 
-## Run the backend
+## Run the app
+Use two terminals:
+```sh
+cd backend  && python -m uv run uvicorn app.main:app --reload   # API on :8000
+cd frontend && npm install && npm run dev                       # UI on http://localhost:5173
+```
+Open http://localhost:5173 and create an account. Vite proxies `/api` to the backend, so the browser sees a single origin (session cookie and CSRF check work without CORS).
+To try the UI without using Groq quota, start the backend with `PROVIDER=fake`.
+
+## Run the backend only
 ```sh
 cd backend
 python -m uv run uvicorn app.main:app --reload     # http://localhost:8000/health/ready, /api/models, /docs
@@ -43,6 +52,11 @@ cd backend
 python -m uv run pytest              # unit + integration tests (needs the DB container; wipes assistant_test only)
 python -m uv run pytest -m live      # opt-in: real Groq calls (uses free-tier quota)
 python -m uv run ruff check . && python -m uv run ruff format --check .
+
+cd frontend
+npm run typecheck && npm run lint && npm run build
+npx playwright install chromium      # first time only
+npm run test:e2e                     # starts its own backend (fake provider, assistant_e2e DB) + UI
 ```
 
 The fake provider (`PROVIDER=fake`) echoes messages. A marker such as `[fake:rate_limit]`, `[fake:cut]` or `[fake:timeout]` in a message makes it simulate that failure (see `app/providers/fake.py`).

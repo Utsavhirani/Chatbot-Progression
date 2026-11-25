@@ -20,7 +20,8 @@ async def _create(client: httpx.AsyncClient, **body: object) -> dict:
 
 async def test_create_with_defaults(alice: httpx.AsyncClient) -> None:
     conv = await _create(alice)
-    assert conv["title"] == "New conversation" and conv["system_prompt"] is None
+    assert conv["title"] == "New conversation"
+    assert conv["system_prompt"].startswith("You are a friendly, professional customer-support assistant")
     assert conv["settings"] == {"model": "qwen/qwen3.8-27b", "temperature": 0.3, "max_tokens": 800}
 
 
@@ -141,3 +142,8 @@ async def test_data_persists_across_app_restart(
 async def test_invalid_uuid_path_is_validation_error(alice: httpx.AsyncClient) -> None:
     resp = await alice.get("/api/conversations/not-a-uuid")
     assert resp.status_code == 422 and resp.json()["error"]["code"] == "validation_error"
+
+
+async def test_explicit_null_system_prompt_overrides_default(alice: httpx.AsyncClient) -> None:
+    assert (await _create(alice, system_prompt=None))["system_prompt"] is None
+    assert (await _create(alice, system_prompt="Custom."))["system_prompt"] == "Custom."

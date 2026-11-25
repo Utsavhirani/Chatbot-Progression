@@ -7,7 +7,7 @@ import uuid
 import structlog
 from fastapi import APIRouter, status
 
-from app.api.deps import CurrentUser, DbSession, Registry
+from app.api.deps import AppSettings, CurrentUser, DbSession, Registry
 from app.conversations import service
 from app.schemas.conversations import ConversationCreate, ConversationOut, ConversationUpdate, MessageOut
 
@@ -25,9 +25,9 @@ async def list_conversations(user: CurrentUser, db: DbSession) -> list[Conversat
 
 @router.post("", response_model=ConversationOut, status_code=status.HTTP_201_CREATED)
 async def create_conversation(
-    body: ConversationCreate, user: CurrentUser, db: DbSession, registry: Registry
+    body: ConversationCreate, user: CurrentUser, db: DbSession, registry: Registry, settings: AppSettings
 ) -> ConversationOut:
-    conversation = await service.create(db, registry, user.id, body)
+    conversation = await service.create(db, registry, user.id, body, settings.default_system_prompt)
     _bind(conversation.id)
     return ConversationOut.model_validate(conversation)
 

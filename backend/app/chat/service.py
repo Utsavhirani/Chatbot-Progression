@@ -301,7 +301,7 @@ class ChatService:
                     turn,
                     content="".join(parts),
                     status=status,
-                    error_code=_outcome_code(status, error, internal_failure),
+                    error_code=_outcome_code(status, error, internal_failure, finish_reason),
                     usage=usage,
                     attempts=attempts,
                     ttft_ms=ttft_ms,
@@ -489,7 +489,12 @@ async def release_abandoned_streams(sessionmaker: async_sessionmaker[AsyncSessio
         return result.rowcount or 0
 
 
-def _outcome_code(status: str, error: ProviderError | None, internal_failure: bool) -> str | None:
+def _outcome_code(
+    status: str, error: ProviderError | None, internal_failure: bool, finish_reason: str | None = None
+) -> str | None:
+    """Code stored on the message. For complete replies it is a note, e.g. cut off by max_tokens."""
+    if status == "complete":
+        return "length_limit" if finish_reason == "length" else None
     if error is not None:
         return error.code
     if internal_failure:

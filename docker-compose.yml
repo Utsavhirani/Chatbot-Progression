@@ -1,5 +1,5 @@
 # Local Postgres (with pgvector, needed from V2) for development AND tests.
-# Databases: `assistant` (dev) and `assistant_test` (pytest, wiped by tests).
+# Databases: `assistant` (dev), `assistant_test` (pytest, wiped by tests), `assistant_e2e` (Playwright).
 # Start: docker compose up -d   ·   Stop: docker compose stop   ·   Reset data: docker compose down -v
 name: ai-assistant
 

@@ -30,3 +30,5 @@ Thumbs.db
 
 # Probe output (contains account/org identifiers)
 backend/scripts/probe_results/
+frontend/e2e/screenshots/
+frontend/blob-report/
