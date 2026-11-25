@@ -40,6 +40,29 @@ class Settings(BaseSettings):
     # Overall deadline for one generation, including retries.
     provider_total_timeout_s: float = Field(default=120.0, gt=0)
 
+    # --- Database --------------------------------------------------------
+    database_url: str = "postgresql+asyncpg://assistant:assistant_dev_pw@127.0.0.1:5433/assistant"
+    test_database_url: str = "postgresql+asyncpg://assistant:assistant_dev_pw@127.0.0.1:5433/assistant_test"
+    db_connect_timeout_s: float = Field(default=5.0, gt=0)
+
+    # --- Auth / sessions ---------------------------------------------------
+    session_cookie_name: str = "session"
+    session_ttl_days: int = Field(default=14, ge=1, le=90)
+    # Comma-separated browser origins allowed to make state-changing requests (CSRF defence).
+    allowed_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
+
+    # --- Rate limits (per process; see docs/decisions.md #8) -----------------
+    login_rate_per_minute: int = Field(default=5, ge=1)
+    register_rate_per_minute: int = Field(default=5, ge=1)
+
+    @property
+    def allowed_origin_set(self) -> frozenset[str]:
+        return frozenset(o.strip().rstrip("/") for o in self.allowed_origins.split(",") if o.strip())
+
+    @property
+    def secure_cookies(self) -> bool:
+        return self.env == "prod"
+
 
 @lru_cache
 def get_settings() -> Settings:

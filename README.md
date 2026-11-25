@@ -3,7 +3,7 @@
 A business customer-support assistant that grows over several versions: chat → RAG → evaluation → tools → memory → production readiness.
 See `docs/ROADMAP.md`. The current milestone is **V1**; its plan is in `docs/v1-architecture.md`, and design decisions are in `docs/decisions.md`.
 
-> Status: **V1, Step 1 done** (provider core). The API has health and models endpoints, and a terminal chat demo is available. Next is Step 2: persistence and authentication.
+> Status: **V1, Step 2 done** (persistence and authentication: register/login/logout, plus conversation create/read/update/delete with per-user isolation). Next is Step 3: the streaming chat endpoint.
 
 ## Prerequisites
 - Python 3.12 via [uv](https://docs.astral.sh/uv/). On this machine uv is run as `python -m uv`.
@@ -17,6 +17,7 @@ cp .env.example .env          # then fill in GROQ_API_KEY
 docker compose up -d          # Postgres on localhost:5433 (dev + test DBs)
 cd backend
 python -m uv sync
+python -m uv run alembic upgrade head   # create/upgrade the dev schema
 ```
 
 ## Probe the LLM provider
@@ -39,7 +40,7 @@ python -m uv run python scripts/chat_cli.py        # streaming terminal chat via
 ## Tests
 ```sh
 cd backend
-python -m uv run pytest              # unit tests (mocked provider, no network)
+python -m uv run pytest              # unit + integration tests (needs the DB container; wipes assistant_test only)
 python -m uv run pytest -m live      # opt-in: real Groq calls (uses free-tier quota)
 python -m uv run ruff check . && python -m uv run ruff format --check .
 ```

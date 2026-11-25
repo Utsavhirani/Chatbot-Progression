@@ -11,6 +11,7 @@ import structlog
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import DBAPIError, InterfaceError, OperationalError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.core.logging import get_logger
@@ -69,6 +70,22 @@ def install_error_handlers(app: FastAPI) -> None:
     async def _http(_: Request, exc: StarletteHTTPException) -> JSONResponse:
         code = {404: "not_found", 405: "method_not_allowed"}.get(exc.status_code, "http_error")
         return JSONResponse(error_body(code, str(exc.detail)), exc.status_code)
+
+    async def _db_unavailable(_: Request, exc: Exception) -> JSONResponse:
+        log.error("db_unavailable", error_type=type(exc).__name__)
+        return JSONResponse(
+            error_body("db_unavailable", "The database is temporarily unavailable.", retryable=True), 503
+        )
+
+    for exc_type in (OperationalError, InterfaceError, ConnectionError, TimeoutError):
+        app.add_exception_handler(exc_type, _db_unavailable)
+
+    @app.exception_handler(DBAPIError)
+    async def _dbapi(request: Request, exc: DBAPIError) -> JSONResponse:
+        if exc.connection_invalidated:
+            return await _db_unavailable(request, exc)
+        log.exception("db_error", error_type=type(exc.orig).__name__)
+        return JSONResponse(error_body("internal_error", "An unexpected error occurred."), 500)
 
     @app.exception_handler(Exception)
     async def _unhandled(_: Request, exc: Exception) -> JSONResponse:

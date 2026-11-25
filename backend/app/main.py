@@ -10,11 +10,14 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app.api import health, models
+from app.api import auth, conversations, health, models
 from app.core.config import Settings, get_settings
+from app.core.csrf import OriginCheckMiddleware
 from app.core.errors import install_error_handlers
 from app.core.logging import configure_logging, get_logger
 from app.core.middleware import RequestContextMiddleware
+from app.core.ratelimit import RateLimiter
+from app.db.session import Database
 from app.providers.base import ProviderAdapter
 from app.providers.registry import ModelRegistry, build_provider
 
@@ -28,6 +31,7 @@ def create_app(settings: Settings | None = None, provider: ProviderAdapter | Non
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        app.state.db = Database(settings)
         app.state.provider = provider if provider is not None else build_provider(settings)
         if app.state.provider is None:
             log.warning("provider.not_configured", provider=settings.provider)
@@ -42,16 +46,21 @@ def create_app(settings: Settings | None = None, provider: ProviderAdapter | Non
         finally:
             if app.state.provider is not None:
                 await app.state.provider.aclose()
+            await app.state.db.dispose()
 
     app = FastAPI(title="AI Business Assistant", version="0.1.0", lifespan=lifespan)
     app.state.settings = settings
     app.state.registry = ModelRegistry.load(default_override=settings.default_model)
     app.state.provider = None
+    app.state.login_limiter = RateLimiter(settings.login_rate_per_minute, 60)
+    app.state.register_limiter = RateLimiter(settings.register_rate_per_minute, 60)
 
+    # Added last = outermost: request IDs exist even for CSRF rejections.
+    app.add_middleware(OriginCheckMiddleware, allowed_origins=settings.allowed_origin_set)
     app.add_middleware(RequestContextMiddleware)
     install_error_handlers(app)
-    app.include_router(health.router)
-    app.include_router(models.router)
+    for router in (health.router, models.router, auth.router, conversations.router):
+        app.include_router(router)
     return app
 
 
