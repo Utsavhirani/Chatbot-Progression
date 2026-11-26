@@ -32,3 +32,6 @@ Thumbs.db
 backend/scripts/probe_results/
 frontend/e2e/screenshots/
 frontend/blob-report/
+
+# Local Claude session transcript
+claude session.txt
